@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { initializeAuth } from './firebase/config';
+import { initializeAuth, auth } from './firebase/config';
+import { onAuthStateChanged } from 'firebase/auth';
 import { useRoom } from './context/RoomContext';
 import HomeScreen from './screens/HomeScreen';
 import LobbyScreen from './screens/LobbyScreen';
@@ -15,7 +16,6 @@ function AppRoutes() {
   useEffect(() => {
     if (!room) return;
 
-    // Auto-navigate based on room state
     if (room.state === 'PLAYING' && location.pathname !== '/game') {
       navigate('/game');
     } else if (room.state === 'LOBBY' && location.pathname !== '/lobby') {
@@ -37,33 +37,58 @@ function AppRoutes() {
 }
 
 function App() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // First, sign in anonymously
     initializeAuth()
-      .then(user => {
-        setUserId(user.uid);
-        setLoading(false);
+      .then(() => {
+        console.log('Initial auth completed');
       })
       .catch(error => {
         console.error('Auth initialization failed:', error);
-        setLoading(false);
+        setError(error.message || 'Authentication failed');
       });
+
+    // Then, wait for auth state to be confirmed
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log('Auth state ready, user:', user.uid);
+        setAuthReady(true);
+        setError(null);
+      } else {
+        console.log('No user yet');
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  if (loading) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-        <p className="text-slate-400">Initializing...</p>
+      <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold text-red-400 mb-4">Connection Failed</h1>
+          <p className="text-slate-300 mb-6">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-accent text-dark-bg font-bold py-3 px-6 rounded-lg hover:bg-cyan-400 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
 
-  if (!userId) {
+  if (!authReady) {
     return (
-      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-        <p className="text-red-400">Authentication failed</p>
+      <div className="min-h-screen bg-dark-bg flex flex-col items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent mx-auto mb-4"></div>
+          <p className="text-slate-400">Connecting...</p>
+        </div>
       </div>
     );
   }

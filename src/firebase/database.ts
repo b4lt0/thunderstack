@@ -11,9 +11,14 @@ export function generateRoomCode(): string {
 // Get unique player ID (combines auth UID with session ID)
 function getPlayerId(): string {
   const userId = auth.currentUser?.uid;
-  if (!userId) throw new Error('Not authenticated');
+  if (!userId) {
+    console.error('Auth not ready, currentUser:', auth.currentUser);
+    throw new Error('Not authenticated - please refresh the page');
+  }
   return `${userId}_${sessionId}`;
 }
+
+
 
 // Create a new room in Firebase
 export async function createRoom(hostNickname: string): Promise<string> {

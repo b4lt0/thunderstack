@@ -8,4 +8,31 @@ body {
   -webkit-font-smoothing: antialiased;
   background-color: #0f172a;
   color: #f1f5f9;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe area for notched phones */
+.safe-area-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+.safe-area-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Prevent pull-to-refresh */
+body {
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Better touch targets */
+.touch-manipulation {
+  touch-action: manipulation;
 }

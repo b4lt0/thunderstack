@@ -12,11 +12,11 @@ const firebaseConfig = {
   messagingSenderId: "610027581896",
   appId: "1:610027581896:web:626f92cb375070cde010fd"
   };
-  // Initialize Firebase
+    // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   export const auth = getAuth(app);
   export const database = getDatabase(app);
-  
+
   // Generate a unique session ID for this tab/window
   const generateSessionId = (): string => {
     const sessionId = sessionStorage.getItem('thunderstack_session_id');
@@ -26,19 +26,30 @@ const firebaseConfig = {
     sessionStorage.setItem('thunderstack_session_id', newSessionId);
     return newSessionId;
   };
-  
+
   export const sessionId = generateSessionId();
-  
-  // Sign in anonymously on app load
-  export const initializeAuth = async () => {
-    try {
-      const result = await signInAnonymously(auth);
-      console.log('Signed in anonymously:', result.user.uid);
-      console.log('Session ID:', sessionId);
-      return result.user;
-    } catch (error) {
-      console.error('Anonymous sign-in failed:', error);
-      throw error;
+
+  // Sign in anonymously with retry logic
+  export const initializeAuth = async (retries = 3): Promise<any> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        console.log(`Auth attempt ${i + 1}/${retries}`);
+        const result = await signInAnonymously(auth);
+        console.log('Signed in anonymously:', result.user.uid);
+        console.log('Session ID:', sessionId);
+        return result.user;
+      } catch (error: any) {
+        console.error(`Auth attempt ${i + 1} failed:`, error);
+        
+        if (i === retries - 1) {
+          // Last attempt failed
+          throw new Error(`Authentication failed after ${retries} attempts: ${error.message}`);
+        }
+        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+      }
     }
+    
+    throw new Error('Authentication failed');
   };
-  
