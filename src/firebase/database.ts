@@ -1,5 +1,5 @@
-import { ref, set, onValue, off, push, get } from 'firebase/database';
-import { database, auth } from './config';
+import { ref, set, onValue, off, get } from 'firebase/database';
+import { database, auth, sessionId } from './config';
 import type { Room, Player } from '../game/types';
 import { createNewGameRoom } from '../game/logic';
 
@@ -8,11 +8,16 @@ export function generateRoomCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-// Create a new room in Firebase
-export async function createRoom(hostNickname: string): Promise<string> {
+// Get unique player ID (combines auth UID with session ID)
+function getPlayerId(): string {
   const userId = auth.currentUser?.uid;
   if (!userId) throw new Error('Not authenticated');
+  return `${userId}_${sessionId}`;
+}
 
+// Create a new room in Firebase
+export async function createRoom(hostNickname: string): Promise<string> {
+  const playerId = getPlayerId();
   const roomCode = generateRoomCode();
   const roomRef = ref(database, `rooms/${roomCode}`);
 
@@ -20,10 +25,10 @@ export async function createRoom(hostNickname: string): Promise<string> {
     id: roomCode,
     state: 'LOBBY',
     createdAt: Date.now(),
-    hostId: userId,
+    hostId: playerId,
     players: {
-      [userId]: {
-        id: userId,
+      [playerId]: {
+        id: playerId,
         nickname: hostNickname,
         seatIndex: 0,
       },
@@ -45,9 +50,7 @@ export async function joinRoom(
   roomCode: string,
   nickname: string
 ): Promise<void> {
-  const userId = auth.currentUser?.uid;
-  if (!userId) throw new Error('Not authenticated');
-
+  const playerId = getPlayerId();
   const roomRef = ref(database, `rooms/${roomCode}`);
   const snapshot = await get(roomRef);
 
@@ -70,19 +73,17 @@ export async function joinRoom(
   const seatIndex = Math.max(...existingSeatIndices, -1) + 1;
 
   const newPlayer: Player = {
-    id: userId,
+    id: playerId,
     nickname,
     seatIndex,
   };
 
-  await set(ref(database, `rooms/${roomCode}/players/${userId}`), newPlayer);
+  await set(ref(database, `rooms/${roomCode}/players/${playerId}`), newPlayer);
 }
 
 // Start the game (host only)
 export async function startGame(roomCode: string): Promise<void> {
-  const userId = auth.currentUser?.uid;
-  if (!userId) throw new Error('Not authenticated');
-
+  const playerId = getPlayerId();
   const roomRef = ref(database, `rooms/${roomCode}`);
   const snapshot = await get(roomRef);
 
@@ -92,7 +93,7 @@ export async function startGame(roomCode: string): Promise<void> {
 
   const room = snapshot.val() as Room;
 
-  if (room.hostId !== userId) {
+  if (room.hostId !== playerId) {
     throw new Error('Only host can start the game');
   }
 
@@ -139,25 +140,4 @@ export async function updateRoom(roomCode: string, updates: Partial<Room>): Prom
   await set(roomRef, updatedRoom);
 }
 
-// Play a card (combines validation + update)
-export async function playCard(
-  roomCode: string,
-  cardValue: number,
-  pileId: string
-): Promise<void> {
-  const userId = auth.currentUser?.uid;
-  if (!userId) throw new Error('Not authenticated');
-
-  const roomRef = ref(database, `rooms/${roomCode}`);
-  const snapshot = await get(roomRef);
-
-  if (!snapshot.exists()) {
-    throw new Error('Room not found');
-  }
-
-  const room = snapshot.val() as Room;
-
-  // This will be implemented with actual game logic in components
-  // For now, just a placeholder structure
-  await set(roomRef, room);
-}
+export { getPlayerId };

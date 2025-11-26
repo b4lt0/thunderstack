@@ -1,14 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { useRoom } from '../context/RoomContext';
-import { startGame } from '../firebase/database';
-import { auth } from '../firebase/config';
+import { startGame, getPlayerId } from '../firebase/database';
 import { useEffect, useState } from 'react';
 
 export default function LobbyScreen() {
   const navigate = useNavigate();
   const { room, roomCode } = useRoom();
   const [loading, setLoading] = useState(false);
-  const currentUserId = auth.currentUser?.uid;
+  const currentPlayerId = getPlayerId();
 
   useEffect(() => {
     if (!room || !roomCode) {
@@ -24,7 +23,7 @@ export default function LobbyScreen() {
 
   if (!room || !roomCode) return null;
 
-  const isHost = room.hostId === currentUserId;
+  const isHost = room.hostId === currentPlayerId;
   const players = Object.values(room.players).sort((a, b) => a.seatIndex - b.seatIndex);
 
   const handleStartGame = async () => {

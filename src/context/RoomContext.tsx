@@ -12,8 +12,21 @@ interface RoomContextType {
 const RoomContext = createContext<RoomContextType | undefined>(undefined);
 
 export function RoomProvider({ children }: { children: ReactNode }) {
-  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [roomCode, setRoomCodeState] = useState<string | null>(() => {
+    // Load room code from sessionStorage on init
+    return sessionStorage.getItem('thunderstack_room_code');
+  });
   const [room, setRoom] = useState<Room | null>(null);
+
+  // Persist room code to sessionStorage whenever it changes
+  const setRoomCode = (code: string | null) => {
+    setRoomCodeState(code);
+    if (code) {
+      sessionStorage.setItem('thunderstack_room_code', code);
+    } else {
+      sessionStorage.removeItem('thunderstack_room_code');
+    }
+  };
 
   useEffect(() => {
     if (!roomCode) {

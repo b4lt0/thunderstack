@@ -189,17 +189,38 @@ export function checkGameEnd(room: Room): 'RUNNING' | 'WIN' | 'LOSS' {
     return 'WIN';
   }
   
-  // Loss: active player cannot make required minimum moves
+  // Check if active player can meet minimum card requirement
   const minCards = room.drawPile.length > 0 ? 2 : 1;
+  const cardsStillNeeded = minCards - room.cardsPlayedThisTurn;
+  
+  if (cardsStillNeeded <= 0) {
+    // Already played enough cards this turn
+    return 'RUNNING';
+  }
+  
+  // Loss: active player cannot play enough cards to meet minimum
   const activeHand = room.hands[room.activePlayerId];
   
-  if (activeHand.length < minCards) {
-    // Not enough cards to meet minimum
-    if (!canPlayerMove(room, room.activePlayerId)) {
-      return 'LOSS';
+  // If hand has fewer cards than needed, check if any are playable
+  if (activeHand.length < cardsStillNeeded) {
+    return 'LOSS';
+  }
+  
+  // Count how many cards in hand can be played
+  let playableCount = 0;
+  for (const card of activeHand) {
+    for (const pile of room.piles) {
+      if (canPlayCardOnPile(pile, card)) {
+        playableCount++;
+        break; // This card is playable, move to next card
+      }
+    }
+    if (playableCount >= cardsStillNeeded) {
+      return 'RUNNING'; // Player can still meet requirement
     }
   }
   
-  return 'RUNNING';
+  // Player doesn't have enough playable cards to meet minimum
+  return 'LOSS';
 }
 
