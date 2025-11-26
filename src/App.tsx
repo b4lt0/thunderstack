@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initializeAuth } from './firebase/config';
+import HomeScreen from './screens/HomeScreen';
+import LobbyScreen from './screens/LobbyScreen';
+import GameScreen from './screens/GameScreen';
+import ResultsScreen from './screens/ResultsScreen';
 
 function App() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -25,16 +30,24 @@ function App() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-dark-bg flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold text-accent mb-4">THUNDERSTACK</h1>
-        <p className="text-slate-400">All of you against the stack</p>
-        {userId && (
-          <p className="text-xs text-slate-600 mt-4">User ID: {userId.slice(0, 8)}...</p>
-        )}
+  if (!userId) {
+    return (
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
+        <p className="text-red-400">Authentication failed</p>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomeScreen />} />
+        <Route path="/lobby" element={<LobbyScreen />} />
+        <Route path="/game" element={<GameScreen />} />
+        <Route path="/results" element={<ResultsScreen />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
