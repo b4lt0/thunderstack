@@ -160,30 +160,19 @@ function getTotalCardsInHands(room: Room): number {
   return Object.values(room.hands).reduce((sum, hand) => sum + (hand?.length || 0), 0);
 }
 
-// Check game end condition - ONLY call this AFTER endTurn has drawn cards
+// Check game end condition - CRITICAL: Only call AFTER endTurn has drawn cards
 export function checkGameEnd(room: Room): 'RUNNING' | 'WIN' | 'LOSS' {
   const drawPileEmpty = room.drawPile.length === 0;
   const totalCardsInHands = getTotalCardsInHands(room);
   
-  // WIN CONDITIONS:
-  
-  // Win 1: Draw pile empty AND all hands empty
-  if (drawPileEmpty && totalCardsInHands === 0) {
-    return 'WIN';
-  }
-  
-  // Win 2: Draw pile empty AND less than 10 cards remaining AND no one can play
-  if (drawPileEmpty && totalCardsInHands < 10 && !canAnyPlayerMove(room)) {
-    return 'WIN';
-  }
-  
-  // LOSS CONDITIONS:
-  
-  // Loss: Draw pile NOT empty AND active player cannot play minimum cards
+  // CRITICAL: If draw pile has cards, game CANNOT end (player will refill)
   if (!drawPileEmpty) {
+    // Check if current active player can play minimum cards
     const activeHand = room.hands[room.activePlayerId];
-    if (!activeHand) {
-      return 'LOSS';
+    if (!activeHand || activeHand.length === 0) {
+      // Hand is empty but draw pile has cards - this is normal during turn end
+      // Game continues (they'll draw cards)
+      return 'RUNNING';
     }
     
     const minCards = 2; // When draw pile has cards, must play 2
@@ -203,8 +192,32 @@ export function checkGameEnd(room: Room): 'RUNNING' | 'WIN' | 'LOSS' {
       }
     }
     
-    // Cannot play minimum cards
+    // Cannot play minimum cards = LOSS
     return 'LOSS';
+  }
+  
+  // Draw pile is empty - check WIN conditions
+  
+  // Win 1: All hands are empty
+  if (totalCardsInHands === 0) {
+    return 'WIN';
+  }
+  
+  // Win 2: Less than 10 cards remaining AND no one can play
+  if (totalCardsInHands < 10 && !canAnyPlayerMove(room)) {
+    return 'WIN';
+  }
+  
+  // Draw pile empty but players have cards - check if active player can play at least 1
+  const activeHand = room.hands[room.activePlayerId];
+  if (!activeHand || activeHand.length === 0) {
+    // Empty hand with empty draw pile
+    return 'WIN';
+  }
+  
+  // Must play at least 1 card when draw pile is empty
+  if (!canPlayerMove(room, room.activePlayerId)) {
+    return 'LOSS'; // Can't play any card
   }
   
   // Game continues
@@ -227,7 +240,7 @@ export function endTurn(room: Room, playerId: string): Room {
   const playerCount = Object.keys(room.players).length;
   const targetHandSize = playerCount === 1 ? 8 : playerCount === 2 ? 7 : 6;
   
-  // Get current player's hand
+  // Get current player's hand (might be empty after playing all cards)
   const currentHand = room.hands[playerId] || [];
   const currentHandSize = currentHand.length;
   
@@ -242,7 +255,7 @@ export function endTurn(room: Room, playerId: string): Room {
   const newDrawPile = room.drawPile.slice(cardsToDraw);
   const newHand = [...currentHand, ...drawnCards];
   
-  // Move to next player
+  // Move to next player (in solo, this will be same player)
   const playerIds = Object.keys(room.players).sort((a, b) => 
     room.players[a].seatIndex - room.players[b].seatIndex
   );
