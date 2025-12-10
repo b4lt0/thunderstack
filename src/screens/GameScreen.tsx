@@ -54,12 +54,9 @@ export default function GameScreen() {
 
     setIsProcessing(true);
     try {
+      // Just apply the move - DON'T check game end yet
       const updatedRoom = applyMove(room, currentPlayerId, selectedCard, pileId);
-      const gameStatus = checkGameEnd(updatedRoom);
-      if (gameStatus !== 'RUNNING') {
-        updatedRoom.state = gameStatus;
-      }
-
+      
       await updateRoom(roomCode, updatedRoom);
       setSelectedCard(null);
       setError('');
@@ -70,6 +67,7 @@ export default function GameScreen() {
       setIsProcessing(false);
     }
   };
+
 
   const handleEndTurn = async () => {
     if (!isMyTurn || !canEndTurn || isProcessing) return;

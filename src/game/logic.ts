@@ -155,54 +155,56 @@ export function canAnyPlayerMove(room: Room): boolean {
   return false;
 }
 
-// Check game end condition - BEFORE drawing cards
+// Count total cards remaining in all hands
+function getTotalCardsInHands(room: Room): number {
+  return Object.values(room.hands).reduce((sum, hand) => sum + (hand?.length || 0), 0);
+}
+
+// Check game end condition - ONLY call this AFTER endTurn has drawn cards
 export function checkGameEnd(room: Room): 'RUNNING' | 'WIN' | 'LOSS' {
-  // CRITICAL: Check if active player met minimum card requirement for THIS turn
-  const minCards = room.drawPile.length > 0 ? 2 : 1;
-  const cardsStillNeeded = minCards - room.cardsPlayedThisTurn;
+  const drawPileEmpty = room.drawPile.length === 0;
+  const totalCardsInHands = getTotalCardsInHands(room);
   
-  // If player hasn't played minimum yet, check if they CAN
-  if (cardsStillNeeded > 0) {
+  // WIN CONDITIONS:
+  
+  // Win 1: Draw pile empty AND all hands empty
+  if (drawPileEmpty && totalCardsInHands === 0) {
+    return 'WIN';
+  }
+  
+  // Win 2: Draw pile empty AND less than 10 cards remaining AND no one can play
+  if (drawPileEmpty && totalCardsInHands < 10 && !canAnyPlayerMove(room)) {
+    return 'WIN';
+  }
+  
+  // LOSS CONDITIONS:
+  
+  // Loss: Draw pile NOT empty AND active player cannot play minimum cards
+  if (!drawPileEmpty) {
     const activeHand = room.hands[room.activePlayerId];
     if (!activeHand) {
-      return 'LOSS'; // No hand found
-    }
-    
-    // If hand has fewer cards than needed, it's impossible
-    if (activeHand.length < cardsStillNeeded) {
       return 'LOSS';
     }
     
-    // Count how many cards in hand can be played
+    const minCards = 2; // When draw pile has cards, must play 2
+    
+    // Count playable cards
     let playableCount = 0;
     for (const card of activeHand) {
       for (const pile of room.piles) {
         if (canPlayCardOnPile(pile, card)) {
           playableCount++;
-          break; // This card is playable, move to next card
+          break;
         }
       }
-      if (playableCount >= cardsStillNeeded) {
-        return 'RUNNING'; // Player can still meet requirement
+      
+      if (playableCount >= minCards) {
+        return 'RUNNING'; // Can play minimum
       }
     }
     
-    // Player doesn't have enough playable cards to meet minimum
+    // Cannot play minimum cards
     return 'LOSS';
-  }
-  
-  // At this point, active player has played enough cards this turn
-  // Check WIN conditions:
-  
-  // Win condition 1: All cards have been played (draw pile empty AND all hands empty)
-  const allHandsEmpty = Object.values(room.hands).every(hand => hand && hand.length === 0);
-  if (room.drawPile.length === 0 && allHandsEmpty) {
-    return 'WIN';
-  }
-  
-  // Win condition 2: Draw pile is empty and NO player can play their remaining cards
-  if (room.drawPile.length === 0 && !canAnyPlayerMove(room)) {
-    return 'WIN';
   }
   
   // Game continues
@@ -221,31 +223,21 @@ export function endTurn(room: Room, playerId: string): Room {
     throw new Error(`Must play at least ${minCards} card(s)`);
   }
   
-  // FIRST: Check if game should end BEFORE drawing cards
-  const gameStatus = checkGameEnd(room);
-  if (gameStatus !== 'RUNNING') {
-    // Don't draw cards, game is over
-    return {
-      ...room,
-      state: gameStatus,
-    };
-  }
-  
-  // Game continues - draw cards back to original hand size
+  // Determine hand size based on player count
   const playerCount = Object.keys(room.players).length;
-  const handSize = playerCount === 1 ? 8 : playerCount === 2 ? 7 : 6;
+  const targetHandSize = playerCount === 1 ? 8 : playerCount === 2 ? 7 : 6;
   
-  const currentHand = room.hands[playerId];
-  if (!currentHand) {
-    throw new Error('Player hand not found');
-  }
-  
+  // Get current player's hand
+  const currentHand = room.hands[playerId] || [];
   const currentHandSize = currentHand.length;
+  
+  // Calculate how many cards to draw
   const cardsToDraw = Math.min(
-    handSize - currentHandSize,
+    targetHandSize - currentHandSize,
     room.drawPile.length
   );
   
+  // Draw cards
   const drawnCards = room.drawPile.slice(0, cardsToDraw);
   const newDrawPile = room.drawPile.slice(cardsToDraw);
   const newHand = [...currentHand, ...drawnCards];
@@ -257,6 +249,7 @@ export function endTurn(room: Room, playerId: string): Room {
   const currentIndex = playerIds.indexOf(playerId);
   const nextPlayerId = playerIds[(currentIndex + 1) % playerIds.length];
   
+  // Return updated room with cards drawn and turn passed
   return {
     ...room,
     hands: {
