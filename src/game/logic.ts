@@ -100,6 +100,10 @@ export function applyMove(
   
   // Check player has the card
   const hand = room.hands[playerId];
+  if (!hand) {
+    throw new Error('Player hand not found');
+  }
+  
   const cardIndex = hand.indexOf(cardValue);
   if (cardIndex === -1) {
     throw new Error('Card not in hand');
@@ -120,6 +124,91 @@ export function applyMove(
   };
 }
 
+// Check if player can make any valid move
+export function canPlayerMove(room: Room, playerId: string): boolean {
+  const hand = room.hands[playerId];
+  if (!hand || hand.length === 0) {
+    return false;
+  }
+  
+  for (const card of hand) {
+    for (const pile of room.piles) {
+      if (canPlayCardOnPile(pile, card)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+// Check if ANY player can make a valid move
+export function canAnyPlayerMove(room: Room): boolean {
+  const playerIds = Object.keys(room.players);
+  
+  for (const playerId of playerIds) {
+    if (canPlayerMove(room, playerId)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// Check game end condition - BEFORE drawing cards
+export function checkGameEnd(room: Room): 'RUNNING' | 'WIN' | 'LOSS' {
+  // CRITICAL: Check if active player met minimum card requirement for THIS turn
+  const minCards = room.drawPile.length > 0 ? 2 : 1;
+  const cardsStillNeeded = minCards - room.cardsPlayedThisTurn;
+  
+  // If player hasn't played minimum yet, check if they CAN
+  if (cardsStillNeeded > 0) {
+    const activeHand = room.hands[room.activePlayerId];
+    if (!activeHand) {
+      return 'LOSS'; // No hand found
+    }
+    
+    // If hand has fewer cards than needed, it's impossible
+    if (activeHand.length < cardsStillNeeded) {
+      return 'LOSS';
+    }
+    
+    // Count how many cards in hand can be played
+    let playableCount = 0;
+    for (const card of activeHand) {
+      for (const pile of room.piles) {
+        if (canPlayCardOnPile(pile, card)) {
+          playableCount++;
+          break; // This card is playable, move to next card
+        }
+      }
+      if (playableCount >= cardsStillNeeded) {
+        return 'RUNNING'; // Player can still meet requirement
+      }
+    }
+    
+    // Player doesn't have enough playable cards to meet minimum
+    return 'LOSS';
+  }
+  
+  // At this point, active player has played enough cards this turn
+  // Check WIN conditions:
+  
+  // Win condition 1: All cards have been played (draw pile empty AND all hands empty)
+  const allHandsEmpty = Object.values(room.hands).every(hand => hand && hand.length === 0);
+  if (room.drawPile.length === 0 && allHandsEmpty) {
+    return 'WIN';
+  }
+  
+  // Win condition 2: Draw pile is empty and NO player can play their remaining cards
+  if (room.drawPile.length === 0 && !canAnyPlayerMove(room)) {
+    return 'WIN';
+  }
+  
+  // Game continues
+  return 'RUNNING';
+}
+
 // End current player's turn
 export function endTurn(room: Room, playerId: string): Room {
   if (room.activePlayerId !== playerId) {
@@ -132,11 +221,26 @@ export function endTurn(room: Room, playerId: string): Room {
     throw new Error(`Must play at least ${minCards} card(s)`);
   }
   
-  // Draw cards back to original hand size
+  // FIRST: Check if game should end BEFORE drawing cards
+  const gameStatus = checkGameEnd(room);
+  if (gameStatus !== 'RUNNING') {
+    // Don't draw cards, game is over
+    return {
+      ...room,
+      state: gameStatus,
+    };
+  }
+  
+  // Game continues - draw cards back to original hand size
   const playerCount = Object.keys(room.players).length;
   const handSize = playerCount === 1 ? 8 : playerCount === 2 ? 7 : 6;
   
-  const currentHandSize = room.hands[playerId].length;
+  const currentHand = room.hands[playerId];
+  if (!currentHand) {
+    throw new Error('Player hand not found');
+  }
+  
+  const currentHandSize = currentHand.length;
   const cardsToDraw = Math.min(
     handSize - currentHandSize,
     room.drawPile.length
@@ -144,7 +248,7 @@ export function endTurn(room: Room, playerId: string): Room {
   
   const drawnCards = room.drawPile.slice(0, cardsToDraw);
   const newDrawPile = room.drawPile.slice(cardsToDraw);
-  const newHand = [...room.hands[playerId], ...drawnCards];
+  const newHand = [...currentHand, ...drawnCards];
   
   // Move to next player
   const playerIds = Object.keys(room.players).sort((a, b) => 
@@ -165,62 +269,3 @@ export function endTurn(room: Room, playerId: string): Room {
     cardsPlayedThisTurn: 0,
   };
 }
-
-// Check if player can make any valid move
-export function canPlayerMove(room: Room, playerId: string): boolean {
-  const hand = room.hands[playerId];
-  
-  for (const card of hand) {
-    for (const pile of room.piles) {
-      if (canPlayCardOnPile(pile, card)) {
-        return true;
-      }
-    }
-  }
-  
-  return false;
-}
-
-// Check game end condition
-export function checkGameEnd(room: Room): 'RUNNING' | 'WIN' | 'LOSS' {
-  // Win: all cards played (draw pile empty and all hands empty)
-  const allHandsEmpty = Object.values(room.hands).every(hand => hand.length === 0);
-  if (room.drawPile.length === 0 && allHandsEmpty) {
-    return 'WIN';
-  }
-  
-  // Check if active player can meet minimum card requirement
-  const minCards = room.drawPile.length > 0 ? 2 : 1;
-  const cardsStillNeeded = minCards - room.cardsPlayedThisTurn;
-  
-  if (cardsStillNeeded <= 0) {
-    // Already played enough cards this turn
-    return 'RUNNING';
-  }
-  
-  // Loss: active player cannot play enough cards to meet minimum
-  const activeHand = room.hands[room.activePlayerId];
-  
-  // If hand has fewer cards than needed, check if any are playable
-  if (activeHand.length < cardsStillNeeded) {
-    return 'LOSS';
-  }
-  
-  // Count how many cards in hand can be played
-  let playableCount = 0;
-  for (const card of activeHand) {
-    for (const pile of room.piles) {
-      if (canPlayCardOnPile(pile, card)) {
-        playableCount++;
-        break; // This card is playable, move to next card
-      }
-    }
-    if (playableCount >= cardsStillNeeded) {
-      return 'RUNNING'; // Player can still meet requirement
-    }
-  }
-  
-  // Player doesn't have enough playable cards to meet minimum
-  return 'LOSS';
-}
-
